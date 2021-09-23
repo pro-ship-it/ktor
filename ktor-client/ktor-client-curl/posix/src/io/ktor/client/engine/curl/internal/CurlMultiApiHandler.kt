@@ -13,9 +13,19 @@ import kotlinx.cinterop.*
 import kotlinx.coroutines.*
 import libcurl.*
 
+private class RequestHolder(
+    val responseCompletable: CompletableDeferred<CurlSuccess>,
+    val requestWrapper: StableRef<CurlRequestBodyData>,
+    val responseWrapper: StableRef<CurlResponseBodyData>,
+) {
+    fun dispose() {
+        requestWrapper.dispose()
+        responseWrapper.dispose()
+    }
+}
 
 internal class CurlMultiApiHandler : Closeable {
-    private val activeHandles: MutableMap<EasyHandle, CompletableDeferred<CurlSuccess>> = ConcurrentMap()
+    private val activeHandles: MutableMap<EasyHandle, RequestHolder> = ConcurrentMap()
 
     private val cancelledHandles: MutableList<Pair<EasyHandle, Throwable>> = ConcurrentList()
 
@@ -25,9 +35,10 @@ internal class CurlMultiApiHandler : Closeable {
     private val easyHandlesToUnpause by shared(ConcurrentList<EasyHandle>())
 
     override fun close() {
-        for ((handle, _) in activeHandles) {
+        for ((handle, holder) in activeHandles) {
             curl_multi_remove_handle(multiHandle, handle).verify()
             curl_easy_cleanup(handle)
+            holder.dispose()
         }
 
         activeHandles.clear()
@@ -54,13 +65,18 @@ internal class CurlMultiApiHandler : Closeable {
 
         bodyStartedReceiving.invokeOnCompletion {
             val result = collectSuccessResponse(easyHandle) ?: return@invokeOnCompletion
-            activeHandles[easyHandle]!!.complete(result)
+            activeHandles[easyHandle]!!.responseCompletable.complete(result)
         }
 
         setupMethod(easyHandle, request.method, request.contentLength)
-        setupUploadContent(easyHandle, request)
+        val requestWrapper = setupUploadContent(easyHandle, request)
+        val requestHolder = RequestHolder(
+            deferred,
+            requestWrapper.asStableRef(),
+            responseWrapper.asStableRef()
+        )
 
-        activeHandles[easyHandle] = deferred
+        activeHandles[easyHandle] = requestHolder
 
         easyHandle.apply {
             option(CURLOPT_URL, request.url)
@@ -142,7 +158,7 @@ internal class CurlMultiApiHandler : Closeable {
         }
     }
 
-    private fun setupUploadContent(easyHandle: EasyHandle, request: CurlRequestData) {
+    private fun setupUploadContent(easyHandle: EasyHandle, request: CurlRequestData): COpaquePointer {
         val requestPointer = CurlRequestBodyData(
             body = request.content,
             callContext = request.executionContext,
@@ -157,13 +173,15 @@ internal class CurlMultiApiHandler : Closeable {
             option(CURLOPT_READFUNCTION, staticCFunction(::onBodyChunkRequested))
             option(CURLOPT_INFILESIZE_LARGE, request.contentLength)
         }
+        return requestPointer
     }
 
     private fun handleCompleted() {
         for (cancellation in cancelledHandles) {
             val cancelled = processCancelledEasyHandle(cancellation.first, cancellation.second)
             val handler = activeHandles.remove(cancellation.first)!!
-            handler.completeExceptionally(cancelled.cause)
+            handler.responseCompletable.completeExceptionally(cancelled.cause)
+            handler.dispose()
         }
         cancelledHandles.clear()
 
@@ -179,7 +197,7 @@ internal class CurlMultiApiHandler : Closeable {
 
                 try {
                     val result = processCompletedEasyHandle(message.msg, easyHandle, message.data.result)
-                    val deferred = activeHandles[easyHandle]!!
+                    val deferred = activeHandles[easyHandle]!!.responseCompletable
                     if (deferred.isCompleted) {
                         // already completed with partial response
                         continue
@@ -189,7 +207,7 @@ internal class CurlMultiApiHandler : Closeable {
                         is CurlFail -> deferred.completeExceptionally(result.cause)
                     }
                 } finally {
-                    activeHandles.remove(easyHandle)
+                    activeHandles.remove(easyHandle)!!.dispose()
                 }
             } while (messagesLeft.value != 0)
         }

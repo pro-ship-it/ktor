@@ -101,7 +101,7 @@ internal class ByteChannelNative(
 
         prepareFlushedBytes()
 
-        var result = 0
+        var result: Int
         readable.read(min) {
             val position = it.readPosition
             block(it)
@@ -219,15 +219,11 @@ internal class ByteChannelNative(
             return -1
         }
 
-        var result = 0
-        writable.write(min) {
+        return writable.write(min) {
             val position = it.writePosition
             block(it)
-            result = it.writePosition - position
-            result
+            it.writePosition - position
         }
-
-        return result
     }
 
     override suspend fun writeAvailable(src: CPointer<ByteVar>, offset: Int, length: Int): Int {
