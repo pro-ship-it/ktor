@@ -17,7 +17,7 @@ private val versionComponents = java_version
     .filter { it.isNotBlank() }
     .map { Integer.parseInt(it) }
 
-val IDEA_ACTIVE: Boolean = System.getProperty("idea.active") == "true"
+val IDEA_ACTIVE: Boolean = false //System.getProperty("idea.active") == "true"
 
 val OS_NAME = System.getProperty("os.name").toLowerCase()
 

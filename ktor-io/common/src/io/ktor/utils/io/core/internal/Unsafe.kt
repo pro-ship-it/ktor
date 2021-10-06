@@ -16,8 +16,8 @@ import kotlin.native.concurrent.*
 @Experimental(level = Experimental.Level.ERROR)
 public annotation class DangerousInternalIoApi
 
-@DangerousInternalIoApi
-public fun ByteReadPacket.`$unsafeAppend$`(builder: BytePacketBuilder) {
+@DangerousInternalIoApi // FIXME: Name contains illegal characters: "$"
+public fun ByteReadPacket.__unsafeAppend__(builder: BytePacketBuilder) {
     val builderHead = builder.stealAll() ?: return
     val builderSize = builder.size
 

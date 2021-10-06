@@ -1,6 +1,7 @@
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
+import org.jetbrains.kotlin.konan.target.HostManager
 
 val serialization_version: String by project.extra
 
@@ -27,7 +28,7 @@ kotlin {
                 val libcurl by cinterops.creating {
                     defFile = File(projectDir, "desktop/interop/libcurl.def")
 
-                    if (platform.name == "mingwX64") {
+                    if (platform.name == "mingwX64" && HostManager.hostIsMingw) {
                         includeDirs.headerFilterOnly(paths)
                     } else {
                         includeDirs.headerFilterOnly(

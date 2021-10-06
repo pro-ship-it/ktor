@@ -16,7 +16,7 @@ import kotlin.native.SharedImmutable
 // it should not called while any other thread is running.
 // See the curl_global_init(3) man page for details.
 @SharedImmutable
-private val curlGlobalInitReturnCode = curl_global_init(CURL_GLOBAL_ALL.convert())
+private val curlGlobalInitReturnCode = curl_global_init_all()
 
 @Suppress("unused")
 private val initHook = Curl

@@ -5,10 +5,7 @@ import io.ktor.utils.io.internal.utils.*
 import kotlinx.cinterop.*
 import platform.posix.*
 import kotlin.native.concurrent.*
-
-@Suppress("unused")
-@SharedImmutable
-private val s: KX_SOCKET = 0.convert() // do not remove! This is required to hold star import for strerror_r
+import io.ktor.utils.io._size_t
 
 @SharedImmutable
 private val KnownPosixErrors = mapOf<Int, String>(
@@ -134,3 +131,5 @@ private tailrec fun MemScope.strerror(errno: Int, size: size_t = 8192.convert())
     }
     return message.toKString()
 }
+
+internal expect fun strerror_r(errnum: Int, msg: CArrayPointer<ByteVar>, size: _size_t): Int
